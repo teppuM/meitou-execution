@@ -24,5 +24,11 @@ public sealed class ExecutionMod : IMod
         MenuPatch.Apply(context);
         JobPatches.Apply(context);
         AiTabPatch.Apply(context);
+        SwingPatch.Apply(context, Swings);
     }
+
+    /// <summary>
+    /// The execution swing of each weapon kind (<see cref="Meitou.Data.Gameplay.Combat.WeaponCategory"/> as a number), read from the game data.
+    /// </summary>
+    internal static Dictionary<int, Meitou.Data.Gameplay.Combat.CombatTechnique> Swings { get; } = [];
 }

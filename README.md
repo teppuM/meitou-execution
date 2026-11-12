@@ -6,8 +6,9 @@ It only works in MeitouClient. The original Kenshi ignores it.
 
 ## What it does
 
-- Right-click a knocked-out or play-dead character who is not in your squad and choose **Execute**. The nearest selected character walks over and chops at the body until it dies.
+- Right-click a knocked-out or play-dead character who is not in your squad and choose **Execute**. The nearest selected character walks over and chops at the body until it dies. Someone only playing dead won't lie still for it: they get up when the executioner reaches them.
 - Hold Shift when you choose Execute to give the selected characters the **Executing** job instead. Like any other job, they carry it out on their own when nothing more important is going on, finishing off downed bodies nearby after a fight.
+- The swing depends on what the executioner holds: a big overhead chop with heavy weapons, hackers, blunt weapons, polearms and sabres, a downward combo with katanas, and a low kick bare-handed.
 - Every swing is a real hit. How hard it lands depends on the executioner's weapon, skill and strength, and the victim's armor still counts. A weak character may need many swings, and the victim can wake up and crawl away before it is over.
 - Executing someone is murder. Guards of law-abiding factions who see it put a bounty on you and come to arrest you. Witnesses whose faction is at war with the victim's don't care, and killing bandits is no crime. Every swing also counts against you with the victim's faction, just like hitting a downed body in a fight.
 - Executing gives no skill experience.

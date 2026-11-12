@@ -1,6 +1,7 @@
 using System.Numerics;
 using Meitou.Data.Gameplay;
 using Meitou.Data.Gameplay.Ai;
+using Meitou.Data.Gameplay.Combat;
 using Meitou.Modding;
 using Meitou.Simulation;
 using Meitou.Simulation.Ai;
@@ -91,9 +92,19 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     readonly DialogueSystem? _dialogue;
 
     /// <summary>
+    /// The animation library and clip lengths (null headless): which weapon swings can be played and how long each lasts.
+    /// </summary>
+    readonly AnimationSystem? _animation;
+
+    /// <summary>
     /// The executions under way, in the order they began.
     /// </summary>
     readonly List<Job> _jobs = [];
+
+    /// <summary>
+    /// The weapon swing each chopping executioner plays, for the animation layer (<see cref="SwingOf"/>, read on the interface's thread).
+    /// </summary>
+    readonly System.Collections.Concurrent.ConcurrentDictionary<CharacterId, (CombatTechnique Technique, long Start, long Ticks)> _swings = new();
 
     /// <summary>
     /// Bodies a character gave up on reaching, and until when (tick).
@@ -122,14 +133,22 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         public int Blows;
         public int Walks;
         public Vector2 Goal;
+        public float SwingSeconds;
+        public float StrikeAt;
+
+        /// <summary>
+        /// Where the executioner stands for the swing; held there, as a swing's root motion would otherwise step it onto the body each loop.
+        /// </summary>
+        public Vector3 Stand;
     }
 
-    ExecutionSystem(CombatSystem? combat, CrimeSystem? crimes, CaptiveSystem? captives, DialogueSystem? dialogue)
+    ExecutionSystem(CombatSystem? combat, CrimeSystem? crimes, CaptiveSystem? captives, DialogueSystem? dialogue, AnimationSystem? animation)
     {
         _combat = combat;
         _crimes = crimes;
         _captives = captives;
         _dialogue = dialogue;
+        _animation = animation;
     }
 
     /// <summary>
@@ -148,18 +167,18 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     public static ITickSystem Create(SystemBuildContext context)
     {
         var made = new ExecutionSystem(context.Find<CombatSystem>(), context.Find<CrimeSystem>(), context.Find<CaptiveSystem>(),
-            context.Find<DialogueSystem>());
+            context.Find<DialogueSystem>(), context.Find<AnimationSystem>());
         Current = made;
         return made;
     }
 
     /// <summary>
-    /// Saves the Execute Strangers option with the game (one byte: 1 on, 0 off).
+    /// Saves the Execute Neutrals option with the game (one byte: 1 on, 0 off).
     /// </summary>
     public void Write(Stream stream) => stream.WriteByte(_strangers ? (byte)1 : (byte)0);
 
     /// <summary>
-    /// Reads the Execute Strangers option back (a game saved without it keeps the default, off).
+    /// Reads the Execute Neutrals option back (a game saved without it keeps the default, off).
     /// </summary>
     public void Read(Stream stream) => _strangers = stream.ReadByte() == 1;
 
@@ -187,8 +206,13 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     /// <summary>
     /// A character that can carry out an execution: the player's, awake, able to fight, hands free, not carried or caged.
     /// </summary>
-    static bool CanExecute(CharacterCold? a) =>
-        a is { IsPlayer: true, Medical.Incapacitated: false, Fighter.CanAttack: true, Stats: not null, Race: not null }
+    static bool CanExecute(CharacterCold? a) => a is { IsPlayer: true } && Able(a);
+
+    /// <summary>
+    /// Any character (the player's or an NPC) fit to carry an execution on: awake, able to fight, hands free, not carried or caged.
+    /// </summary>
+    static bool Able(CharacterCold? a) =>
+        a is { Medical.Incapacitated: false, Fighter.CanAttack: true, Stats: not null, Race: not null }
         && a.Carrying.IsNone && a.CarriedBy.IsNone && !a.IsImprisoned;
 
     /// <summary>
@@ -429,6 +453,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     {
         var attacker = table.IdOf(slot);
         _jobs.RemoveAll(j => j.Attacker == attacker);
+        _swings.TryRemove(attacker, out _);
         if (table.Cold(slot) is { } c && c.ActionClip == Clip) c.ActionClip = null;
     }
 
@@ -459,7 +484,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
             _jobs.Remove(job);
             return;
         }
-        if (!CanExecute(table.Cold(a)) || !table.TryResolveNext(job.Victim, out int v) || !Executable(table.Cold(v)))
+        if (!Able(table.Cold(a)) || !table.TryResolveNext(job.Victim, out int v) || !Executable(table.Cold(v)))
         {
             Finish(world, a);
             return;
@@ -478,13 +503,24 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         var table = world.Characters;
         ref var n = ref table.Next[a];
         var victim = table.Next[v].Position;
-        if (InReach(n.Position, victim))
+        bool walking = n.Task == (byte)CharacterTask.GoTo;
+
+        // The swing starts as the walk brakes into its stand-off beside the body (the swing then holds it there), still on the walk so its end
+        // does not finish the task; a walk that stopped short but within reach swings from where it stands.
+        if (InReach(n.Position, victim) && (!walking || Vector2.Distance(Flat(n.Position), Flat(victim)) <= StandOff + 3))
         {
+            // One only playing dead does not lie still for the blade: it gets up as the executioner stands over it, and there is no execution.
+            if (table.Cold(v)!.Medical is { PlayingDead: true } faking)
+            {
+                faking.StandUp();
+                Finish(world, a);
+                return;
+            }
+
             StartSwing(world, job, a);
             return;
         }
 
-        bool walking = n.Task == (byte)CharacterTask.GoTo;
         bool moved = Vector2.Distance(job.Goal, Flat(victim)) > StandOff;
         if (walking && !moved) return;
         if (++job.Walks > MaxWalks)
@@ -520,10 +556,48 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
 
         job.Chopping = true;
         job.Time = 0;
+        job.Stand = world.Characters.Next[a].Position;
+        var cold = world.Characters.Cold(a)!;
+        var (technique, seconds, strikeAt) = SwingFor(cold);
+        (job.SwingSeconds, job.StrikeAt) = (seconds, strikeAt);
+        if (technique is null) return;
+
+        // A weapon swing replaces the executioners' chop: the animation layer asks the combat system what the character plays (SwingPatch).
+        cold.ActionClip = null;
+        _swings[job.Attacker] = (technique, world.Tick, Math.Max(1, (long)MathF.Round(seconds / world.TickSeconds)));
     }
 
     /// <summary>
-    /// The swing: facing the body, one blow per clip at <see cref="BlowAt"/> of it, each booking the murder and counting with the victim's faction;
+    /// The swing for the executioner's weapon (<see cref="ExecutionMod.Swings"/> by its technique category) when the animation library has it:
+    /// its length (the clip's over the technique's speed) and the fraction at which its first blow strikes. Otherwise none, with the
+    /// executioners' chop length and <see cref="BlowAt"/>.
+    /// </summary>
+    (CombatTechnique? Technique, float Seconds, float StrikeAt) SwingFor(CharacterCold c)
+    {
+        float chop = MathF.Max(_captives?.ChopSeconds ?? 1.5f, 0.1f);
+        if (c.Fighter is not { } fighter || !ExecutionMod.Swings.TryGetValue(fighter.TechniqueCategory, out var t) || _animation is null
+            || _animation.Library.IndexOfTechnique(t.StringId) < 0)
+        {
+            return (null, chop, BlowAt);
+        }
+
+        float seconds = _animation.Lengths.For(c.Race?.StringId).Of(t.AnimName) / MathF.Max(t.AnimSpeedMult, 0.1f);
+        return (t, MathF.Max(seconds, 0.3f), Math.Clamp(t.StrikeProgress(0), 0.1f, 0.95f));
+    }
+
+    /// <summary>
+    /// The weapon swing <paramref name="id"/> plays at <paramref name="tick"/> and how far through it (looping), for the animation layer; null when
+    /// it is not chopping with a weapon swing. Any thread.
+    /// </summary>
+    public (CombatTechnique Technique, float Progress, bool IsAttack)? SwingOf(CharacterId id, long tick)
+    {
+        if (!_swings.TryGetValue(id, out var s)) return null;
+        long into = Math.Max(0, tick - s.Start) % s.Ticks;
+        return (s.Technique, into / (float)s.Ticks, true);
+    }
+
+    /// <summary>
+    /// The swing: facing the body, one blow per swing at its strike moment, each booking the murder and counting with the victim's faction;
     /// the victim's death ends it. A body dragged out of reach ends it too.
     /// </summary>
     void Chop(World world, Job job, int a, int v)
@@ -531,16 +605,22 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         var table = world.Characters;
         ref var n = ref table.Next[a];
         var victim = table.Next[v].Position;
-        if (n.Task != (byte)CharacterTask.Idle || table.Cold(a)!.ActionClip != Clip || !InReach(n.Position, victim) || _combat is null)
+        if (n.Task != (byte)CharacterTask.Idle || table.Cold(a)!.Running is not { Row: Row } || !InReach(n.Position, victim) || _combat is null)
         {
             Finish(world, a);
             return;
         }
+        // An attack plays with root motion (the animation layer moves the character by it, and a downed body is not in the way), so each looped
+        // swing would carry the executioner further onto the body: it stays where it started swinging.
+        n.Position = job.Stand;
         Face(ref n, victim);
 
+        // A weapon swing is made with the weapon in hand: drawn every tick, as the combat step puts a player character's weapon away while it idles.
+        if (_swings.ContainsKey(job.Attacker) && table.Cold(a)!.Fighter is { Unarmed: false, Weapon: { } weapon })
+            table.Cold(a)!.DrawnWeapon = HandHold.OfCategory(weapon.Data.AnimationCategory).Weapon;
+
         job.Time += world.TickSeconds;
-        float swing = MathF.Max(_captives?.ChopSeconds ?? 1.5f, 0.1f);
-        if (job.Time < (job.Blows + BlowAt) * swing) return;
+        if (job.Time < (job.Blows + job.StrikeAt) * job.SwingSeconds) return;
         job.Blows++;
 
         var vc = table.Cold(v)!;
