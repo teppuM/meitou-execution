@@ -161,20 +161,36 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
 
     /// <summary>
     /// Whether the Executing job may take this body: never the player's faction or an ally of it; a hostile always; a stranger only when the
-    /// setting allows strangers. Hostile: a bandit or other lawless faction (they attack on sight whatever the relation table says: the Starving
-    /// Bandits stand at -10 with a new player faction, not hostile by the table), a faction hostile to the player's, or a squad that took the
-    /// executioner for an enemy in a fight.
+    /// setting allows strangers. Hostile means evidence the character is against the player: its squad fought a member of the executioner's
+    /// squad (it tagged one TEMP_ENEMY), or, not an animal, its faction is at war with the player's (<see cref="CharacterFacts.RegardsEnemy"/>).
+    /// Neither a lawless faction nor the BANDIT class is enough (seen in play in The Hub: slave hunters knocked out a crowd of Holy Nation Outlaws,
+    /// a lawless faction of mostly civilians; taking their one bandit-class member turned the faction hostile, after which every downed member
+    /// counted).
     /// </summary>
-    bool JobMayTake(World world, CharacterId executioner, CharacterCold v)
+    bool JobMayTake(World world, int slot, CharacterCold v)
     {
         int player = world.Player.Faction;
         var relations = _crimes?.Relations;
+        bool known = relations is not null && player >= 0 && relations.Contains(v.Faction);
         if (v.IsPlayer || v.Faction == player) return false;
-        if (relations is not null && player >= 0 && relations.Contains(v.Faction) && relations.IsAlly(player, v.Faction)) return false;
-        if (_strangers) return true;
-        return _crimes?.Factions.Lawless(v.Faction) == true
-            || CharacterFacts.HostileToPlayer(relations, player, v.Faction, false)
-            || _dialogue is not null && v.SquadId >= 0 && _dialogue.Memory.HasShort(world, v.SquadId, executioner, MemoryTag.TempEnemy);
+        if (known && relations!.IsAlly(player, v.Faction)) return false;
+        if (_strangers || FoughtSquad(world, slot, v)) return true;
+        return !CharacterFacts.Animal(v) && known && CharacterFacts.RegardsEnemy(relations, player, v.Faction);
+    }
+
+    /// <summary>
+    /// The body's squad took the executioner or one of its squad mates for an enemy (the short-term TEMP_ENEMY tag a fight leaves).
+    /// </summary>
+    bool FoughtSquad(World world, int slot, CharacterCold v)
+    {
+        if (_dialogue is null || v.SquadId < 0) return false;
+        var table = world.Characters;
+        var self = table.IdOf(slot);
+        if (_dialogue.Memory.HasShort(world, v.SquadId, self, MemoryTag.TempEnemy)) return true;
+        if (world.Squads.Find(table.Cold(slot)!.SquadId) is not { } squad) return false;
+        foreach (var mate in squad.Members)
+            if (mate != self && _dialogue.Memory.HasShort(world, v.SquadId, mate, MemoryTag.TempEnemy)) return true;
+        return false;
     }
 
     #endregion
@@ -312,7 +328,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
             float d = Vector3.DistanceSquared(table.Next[v].Position, at);
             if (d >= bestDistance || table.Cold(v) is not { } vc || !Executable(vc)) continue;
             var id = table.IdOf(v);
-            if (Claimed(self, id) || GaveUp(world, self, id) || !JobMayTake(world, self, vc)) continue;
+            if (Claimed(self, id) || GaveUp(world, self, id) || !JobMayTake(world, slot, vc)) continue;
             (best, bestDistance) = (v, d);
         }
         return best;

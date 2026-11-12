@@ -16,7 +16,7 @@ It only works in MeitouClient. The original Kenshi ignores it.
 
 Under Settings, Mods, Execution:
 
-- **Executing job targets**: "Hostiles only" (the default) or "Hostiles and strangers". Hostiles are bandits, factions at war with you, and anyone who fought your squad. Strangers are everyone else except your own faction and its allies. The manual Execute order is never limited.
+- **Executing job targets**: "Hostiles only" (the default) or "Hostiles and strangers". Hostiles are factions at war with you and anyone who fought your squad. Strangers are everyone else except your own faction and its allies. The manual Execute order is never limited.
 
 ## Install
 
