@@ -34,7 +34,7 @@ Saves stay readable by the original game: the Executing job is stored under a ke
 
 ## Building
 
-Build with the .NET 11 SDK against a MeitouClient build: `dotnet build -c Release -p:MeitouBin=<folder holding MeitouClient.dll>/`.
+Build with the .NET 11 SDK against an official MeitouClient release: `dotnet build -c Release -p:MeitouBin=<release folder holding MeitouClient.dll>/`. A self-built MeitouClient won't do: its files carry a different version number, and a mod built against them won't load in the official releases.
 
 ## License
 

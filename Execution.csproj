@@ -8,9 +8,20 @@
     <RootNamespace>Execution</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <!-- The game build the mod is compiled against: the folder holding MeitouClient.dll (pass -p:MeitouBin=<folder>/). -->
-    <MeitouBin Condition="'$(MeitouBin)' == ''">$(MSBuildThisFileDirectory)../MeitouClient/src/Meitou.Game/bin/Release/net11.0/</MeitouBin>
+    <!-- The game the mod is compiled against: an official MeitouClient release folder, the one holding MeitouClient.dll
+         (pass -p:MeitouBin=<folder>/). -->
+    <MeitouBin Condition="'$(MeitouBin)' == ''">$(MSBuildThisFileDirectory)../MeitouClient/</MeitouBin>
   </PropertyGroup>
+
+  <!-- A self-built MeitouClient stamps its assemblies 1.0.0.0, the official releases their game version (0.17.4.0): a mod compiled against a
+       self-built game asks for 1.0.0.0, which no release can supply, and fails to load in every official release. -->
+  <Target Name="RequireReleaseGame" BeforeTargets="ResolveAssemblyReferences">
+    <GetAssemblyIdentity AssemblyFiles="$(MeitouBin)MeitouClient.dll">
+      <Output TaskParameter="Assemblies" ItemName="MeitouGameIdentity" />
+    </GetAssemblyIdentity>
+    <Error Condition="'%(MeitouGameIdentity.Version)' == '1.0.0.0'"
+           Text="$(MeitouBin)MeitouClient.dll is a self-built game (version 1.0.0.0). Compile against an official MeitouClient release folder, or the mod will not load in the official releases." />
+  </Target>
 
   <ItemGroup>
     <Reference Include="MeitouClient" HintPath="$(MeitouBin)MeitouClient.dll" Private="false" />
