@@ -12,11 +12,11 @@ It only works in MeitouClient. The original Kenshi ignores it.
 - Executing someone is murder. Guards of law-abiding factions who see it put a bounty on you and come to arrest you. Witnesses whose faction is at war with the victim's don't care, and killing bandits is no crime. Every swing also counts against you with the victim's faction, just like hitting a downed body in a fight.
 - Executing gives no skill experience.
 
-## Settings
+## Squad AI option
 
-Under Settings, Mods, Execution:
+In the squad overview's AI tab, beside Heal Allies and Rescue Allies:
 
-- **Executing job targets**: "Hostiles only" (the default) or "Hostiles and strangers". Hostiles are factions at war with you and anyone who fought your squad. Strangers are everyone else except your own faction and its allies. The manual Execute order is never limited.
+- **Execute Neutrals**: off (the default), the Executing job only takes hostiles: factions at war with you and anyone who fought your squad. On, it also takes downed neutrals, everyone except your own faction and its allies. Their factions will turn against you, and guards who see it will call it murder. The option is saved with each game. The manual Execute order is never limited.
 
 ## Install
 

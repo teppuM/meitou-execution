@@ -1,6 +1,7 @@
 using System.Numerics;
 using Meitou.Data.Gameplay;
 using Meitou.Data.Gameplay.Ai;
+using Meitou.Modding;
 using Meitou.Simulation;
 using Meitou.Simulation.Ai;
 using Meitou.Simulation.Bodies;
@@ -27,6 +28,11 @@ public sealed record ExecuteOrder(IReadOnlyList<CharacterId> Attackers, Characte
 }
 
 /// <summary>
+/// The AI tab's Execute Strangers option set on or off. An order command, so a paused game applies it at once.
+/// </summary>
+public sealed record SetExecuteStrangers(bool On) : OrderCommand;
+
+/// <summary>
 /// Executions: a player character walks to an unconscious (or playing dead) character and chops at it until it dies. Each blow is the game's
 /// captive execution blow (<see cref="CombatSystem.Execute"/>: no block or dodge, through armour, with the usual blood, sound, death and lost
 /// limbs), one per <c>chop down static</c> clip as the prison executioners swing. Every blow sets a pending Murder against the victim's faction, so
@@ -34,9 +40,10 @@ public sealed record ExecuteOrder(IReadOnlyList<CharacterId> Attackers, Characte
 /// (<see cref="FactionDeeds.Blow"/>). Runs on the unused vanilla row 229 <see cref="TaskType.StealthKill"/> as a player order (the Execute menu row)
 /// or as the Executing job (Shift + Execute), which finishes off downed bodies near the character whenever the job list reaches it. Walking is
 /// <see cref="CharacterTask.GoTo"/>, chopping <see cref="CharacterTask.Idle"/> with the clip; another order or Stop ends it. An execution under way
-/// is not saved; the job is (<see cref="JobPatches"/>).
+/// is not saved; the job is (<see cref="JobPatches"/>), and so is the AI tab's Execute Strangers option (<see cref="AiTabPatch"/>), in the mod's own
+/// save data.
 /// </summary>
-public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITaskHandler, IDecisionOwner, IJobSource
+public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITaskHandler, IDecisionOwner, IJobSource, IModSaveData
 {
     #region Setup
 
@@ -94,9 +101,9 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     readonly List<(CharacterId Attacker, CharacterId Victim, long Until)> _gaveUp = [];
 
     /// <summary>
-    /// The job also goes after strangers (the setting, copied in the serial input step).
+    /// The AI tab's Execute Strangers option: the job also goes after strangers. Set in the serial input step; the interface reads it.
     /// </summary>
-    bool _strangers;
+    volatile bool _strangers;
 
     /// <summary>
     /// Set while the walk hands over to the swing, so the walk's end does not drop the job.
@@ -126,10 +133,35 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     }
 
     /// <summary>
+    /// The system of the world made last (the running game's), for the AI tab.
+    /// </summary>
+    public static ExecutionSystem? Current { get; private set; }
+
+    /// <summary>
+    /// The AI tab's Execute Strangers option.
+    /// </summary>
+    public bool Strangers => _strangers;
+
+    /// <summary>
     /// The factory the mod registers: finds the standard systems it works with.
     /// </summary>
-    public static ITickSystem Create(SystemBuildContext context) =>
-        new ExecutionSystem(context.Find<CombatSystem>(), context.Find<CrimeSystem>(), context.Find<CaptiveSystem>(), context.Find<DialogueSystem>());
+    public static ITickSystem Create(SystemBuildContext context)
+    {
+        var made = new ExecutionSystem(context.Find<CombatSystem>(), context.Find<CrimeSystem>(), context.Find<CaptiveSystem>(),
+            context.Find<DialogueSystem>());
+        Current = made;
+        return made;
+    }
+
+    /// <summary>
+    /// Saves the Execute Strangers option with the game (one byte: 1 on, 0 off).
+    /// </summary>
+    public void Write(Stream stream) => stream.WriteByte(_strangers ? (byte)1 : (byte)0);
+
+    /// <summary>
+    /// Reads the Execute Strangers option back (a game saved without it keeps the default, off).
+    /// </summary>
+    public void Read(Stream stream) => _strangers = stream.ReadByte() == 1;
 
     /// <summary>
     /// Registers the row's act-out with this system.
@@ -198,13 +230,13 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     #region Orders
 
     /// <summary>
-    /// Copies the setting and takes the tick's execute orders.
+    /// Takes the tick's execute orders and Execute Strangers changes.
     /// </summary>
     public void Inputs(World world, IReadOnlyList<SimCommand> commands)
     {
-        _strangers = ExecutionMod.Settings.JobTargets == ExecutionSettings.HostilesAndStrangers;
         foreach (var command in commands)
         {
+            if (command is SetExecuteStrangers set) _strangers = set.On;
             if (command is not ExecuteOrder order) continue;
             if (order.AsJob) AddJobs(world, order);
             else

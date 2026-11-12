@@ -14,20 +14,15 @@ public sealed class ExecutionMod : IMod
     internal static ModContext? Context { get; private set; }
 
     /// <summary>
-    /// The player's settings (read by the simulation in a serial step).
-    /// </summary>
-    internal static ExecutionSettings Settings { get; } = new();
-
-    /// <summary>
-    /// Registers the settings, the execution system (after every standard system, so its slow step sees the tick's combat) and the patches: the
-    /// menu row, the job's name in the jobs panel, and the job's save.
+    /// Registers the execution system (after every standard system, so its slow step sees the tick's combat) and the patches: the menu row, the
+    /// job's name in the jobs panel, the job's save, and the AI tab's Execute Strangers option.
     /// </summary>
     public void Initialize(ModContext context)
     {
         Context = context;
-        context.AddSettings(Settings);
         context.AddSystem("executions", ExecutionSystem.Create, SystemAnchor.End);
         MenuPatch.Apply(context);
         JobPatches.Apply(context);
+        AiTabPatch.Apply(context);
     }
 }
