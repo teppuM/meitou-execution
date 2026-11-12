@@ -1,0 +1,40 @@
+# Execution
+
+A code mod for [MeitouClient](https://github.com/VlcekM/MeitouClient) that lets your characters execute enemies who have been knocked unconscious.
+
+It only works in MeitouClient. The original Kenshi ignores it.
+
+## What it does
+
+- Right-click a knocked-out or play-dead character who is not in your squad and choose **Execute**. The nearest selected character walks over and chops at the body until it dies.
+- Hold Shift when you choose Execute to give the selected characters the **Executing** job instead. Like any other job, they carry it out on their own when nothing more important is going on, finishing off downed bodies nearby after a fight.
+- Every swing is a real hit. How hard it lands depends on the executioner's weapon, skill and strength, and the victim's armor still counts. A weak character may need many swings, and the victim can wake up and crawl away before it is over.
+- Executing someone is murder. Guards of law-abiding factions who see it put a bounty on you and come to arrest you. Witnesses whose faction is at war with the victim's don't care, and killing bandits is no crime. Every swing also counts against you with the victim's faction, just like hitting a downed body in a fight.
+- Executing gives no skill experience.
+
+## Settings
+
+Under Settings, Mods, Execution:
+
+- **Executing job targets**: "Hostiles only" (the default) or "Hostiles and strangers". Hostiles are bandits, factions at war with you, and anyone who fought your squad. Strangers are everyone else except your own faction and its allies. The manual Execute order is never limited.
+
+## Install
+
+1. Download the zip from the Releases page and unzip it into Kenshi's `mods` folder, so that you have `Kenshi\mods\Execution\Execution.mod`, `Execution.dll` and `meitou.json`.
+2. Turn it on in the MeitouClient launcher's mod list.
+
+Or subscribe on the Steam Workshop and turn it on the same way.
+
+The mod is built for MeitouClient 0.17.x (tested on 0.17.4). On another version MeitouClient tells you it was built for a different version instead of loading it.
+
+## Saves
+
+Saves stay readable by the original game: the Executing job is stored under a key of the mod's own, and an execution in progress is not saved.
+
+## Building
+
+Build with the .NET 11 SDK against a MeitouClient build: `dotnet build -c Release -p:MeitouBin=<folder holding MeitouClient.dll>/`.
+
+## License
+
+GNU General Public License, version 3 or (at your option) any later version, the same as MeitouClient. See [LICENSE](LICENSE).
