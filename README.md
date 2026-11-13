@@ -1,6 +1,6 @@
 # Execution
 
-A code mod for [MeitouClient](https://github.com/VlcekM/MeitouClient) that lets your characters execute enemies who have been knocked unconscious.
+A code mod for [MeitouClient](https://meitou.kenshi.wiki) that lets your characters execute enemies who have been knocked unconscious.
 
 It only works in MeitouClient. The original Kenshi ignores it.
 
@@ -26,7 +26,7 @@ In the squad overview's AI tab, beside Heal Allies and Rescue Allies:
 
 Or subscribe on the Steam Workshop and turn it on the same way.
 
-The mod is built for MeitouClient 0.17.x (tested on 0.17.4). On another version MeitouClient tells you it was built for a different version instead of loading it.
+The mod is built for MeitouClient 0.17.4 and newer (tested on 0.17.4 and 0.18.1). On an older version MeitouClient tells you it was built for a different version instead of loading it.
 
 ## Saves
 

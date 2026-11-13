@@ -1,10 +1,10 @@
 {
   "id": "execution",
   "apiVersion": 2,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "assemblies": [
     "Execution.dll"
   ],
   "entry": "Execution.ExecutionMod",
-  "gameVersion": ">=0.17.4 <0.18.0"
+  "gameVersion": ">=0.17.4"
 }
