@@ -38,7 +38,7 @@ public sealed record SetExecuteStrangers(bool On) : OrderCommand;
 /// captive execution blow (<see cref="CombatSystem.Execute"/>: no block or dodge, through armour, with the usual blood, sound, death and lost
 /// limbs), one per <c>chop down static</c> clip as the prison executioners swing. Every blow sets a pending Murder against the victim's faction, so
 /// the game's witnesses judge it as any crime, and counts with the victim's faction as a blow on a downed body does in a fight
-/// (<see cref="FactionDeeds.Blow"/>). Runs on the unused vanilla row 229 <see cref="TaskType.StealthKill"/> as a player order (the Execute menu row)
+/// (<see cref="FactionDeeds.Blow"/>). Runs on the unused vanilla row 229 <see cref="TaskType.StealthKill"/> as a player order (the Violence... menu row)
 /// or as the Executing job (Shift + Execute), which finishes off downed bodies near the character whenever the job list reaches it. Walking is
 /// <see cref="CharacterTask.GoTo"/>, chopping <see cref="CharacterTask.Idle"/> with the clip; another order or Stop ends it. An execution under way
 /// is not saved; the job is (<see cref="JobPatches"/>), and so is the AI tab's Execute Strangers option (<see cref="AiTabPatch"/>), in the mod's own

@@ -6,7 +6,7 @@ using Meitou.Simulation;
 namespace Execution;
 
 /// <summary>
-/// Adds "Execute" to the right-click menu of a downed, living character who is not the player's: a postfix on the menu's verb list
+/// Adds "Violence..." to the right-click menu of a downed, living character who is not the player's: a postfix on the menu's verb list
 /// (<c>Meitou.Game.Ui.ContextMenuWindow.Verbs</c>, internal, so it is found by name). The selection is read from the window's player interface
 /// (internal too). Unknown captions sort last, so the row sits at the bottom of the menu.
 /// </summary>
@@ -15,7 +15,7 @@ static class MenuPatch
     /// <summary>
     /// The menu caption.
     /// </summary>
-    public const string Caption = "Execute";
+    public const string Caption = "Violence...";
 
     /// <summary>
     /// The window's player interface field (a captured primary-constructor parameter, so found by type, not name).

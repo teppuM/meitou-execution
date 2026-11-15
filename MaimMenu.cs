@@ -6,23 +6,23 @@ namespace Execution;
 
 /// <summary>
 /// The Execute row's choices, drawn as the game draws its right-click menu (the same panel, title and buttons, at the same spot), in the HUD's
-/// overlay slot: Kill, or a limb or set of limbs to cut off. A row whose limbs are all gone (a stump or a prosthetic) is greyed. A click outside the
-/// menu closes it. Test build: Kill gives the execution order; a limb row only writes its choice to the game log.
+/// overlay slot: Execute, or a limb or set of limbs to cut off. A row whose limbs are all gone (a stump or a prosthetic) is greyed. A click outside the
+/// menu closes it. Test build: Execute gives the execution order; a limb row only writes its choice to the game log.
 /// </summary>
 sealed class MaimMenu : IUiExtension
 {
     /// <summary>
-    /// The rows: caption and the limb slots it cuts (bit k for limb slot k: 0 left arm, 1 right arm, 2 left leg, 3 right leg; none for Kill).
+    /// The rows: caption and the limb slots it cuts (bit k for limb slot k: 0 left arm, 1 right arm, 2 left leg, 3 right leg; none for Execute).
     /// </summary>
     internal static readonly (string Caption, int Limbs)[] Rows =
     [
-        ("Kill", 0), ("Left Arm", 1), ("Right Arm", 2), ("Both Arms", 3), ("Left Leg", 4), ("Right Leg", 8), ("Both Legs", 12), ("All Limbs", 15),
+        ("Execute", 0), ("Left Arm", 1), ("Right Arm", 2), ("Both Arms", 3), ("Left Leg", 4), ("Right Leg", 8), ("Both Legs", 12), ("All Limbs", 15),
     ];
 
     /// <summary>
-    /// The right-click menu's text colour and hovered text colour.
+    /// The right-click menu's text colour, and a gone row's (the game dims only a disabled button's background, and these have none).
     /// </summary>
-    static readonly Vector4 Ink = new(0.86f, 0.82f, 0.71f, 1), Hover = new(0.86f, 0.62f, 0.2f, 1);
+    static readonly Vector4 Ink = new(0.86f, 0.82f, 0.71f, 1), Gone = new(0.45f, 0.43f, 0.4f, 1);
 
     /// <summary>
     /// An open menu: who was selected, the body, its name, the limbs it still has (bits as in <see cref="Rows"/>) and where the right-click menu was.
@@ -67,11 +67,12 @@ sealed class MaimMenu : IUiExtension
             Skin = "Kenshi_FloatingPanelSkin", Background = new(0.1f, 0.09f, 0.08f, 0.94f), Text = Ink,
         });
         string title = registration.RegisterStyle("title", new UiStyle { Text = Ink, TextAlign = "Center", FontName = "Kenshi_StandardFont_Medium" });
-        string button = registration.RegisterStyle("button", new UiStyle
+        var buttonStyle = new UiStyle
         {
-            Skin = "Kenshi_Button1Skin", Text = Ink, Hover = Hover, Disabled = new(0.42f, 0.4f, 0.37f, 1), TextAlign = "Center",
-            FontName = "Kenshi_PaintedTextFont_Medium",
-        });
+            Skin = "Kenshi_Button1Skin", Text = Ink, TextAlign = "Center", FontName = "Kenshi_PaintedTextFont_Medium",
+        };
+        string button = registration.RegisterStyle("button", buttonStyle);
+        string gone = registration.RegisterStyle("gone", buttonStyle with { Text = Gone });
         string backdrop = registration.RegisterStyle("backdrop", new UiStyle());
         string pick = registration.RegisterAction("pick", c => Pick(c.Argument));
         string close = registration.RegisterAction("close", _ => s_open = null);
@@ -94,14 +95,15 @@ sealed class MaimMenu : IUiExtension
             for (int i = 0; i < Rows.Length; i++)
             {
                 var (caption, limbs) = Rows[i];
+                bool available = limbs == 0 || (limbs & open.Present) != 0;
                 menu.Children.Add(new UiNode(rowIds[i], UiNodeKind.Button)
                 {
                     Placement = new(w * (1 - 2 * 0.0208333f), optionH * 0.897436f, w * 0.0208333f, titleH + i * optionH + optionH * 0.0512821f),
-                    Style = button,
+                    Style = available ? button : gone,
                     Text = caption,
                     Action = pick,
                     Argument = i.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    Enabled = limbs == 0 || (limbs & open.Present) != 0,
+                    Enabled = available,
                 });
             }
 
@@ -113,7 +115,7 @@ sealed class MaimMenu : IUiExtension
     }
 
     /// <summary>
-    /// A row picked: the menu closes; Kill gives the execution order, a limb row (test build) writes its choice to the log.
+    /// A row picked: the menu closes; Execute gives the execution order, a limb row (test build) writes its choice to the log.
     /// </summary>
     static void Pick(string argument)
     {
