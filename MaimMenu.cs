@@ -7,7 +7,7 @@ namespace Execution;
 /// <summary>
 /// The Execute row's choices, drawn as the game draws its right-click menu (the same panel, title and buttons, at the same spot), in the HUD's
 /// overlay slot: Execute, or a limb or set of limbs to cut off. A row whose limbs are all gone (a stump or a prosthetic) is greyed. A click outside the
-/// menu closes it. Test build: Execute gives the execution order; a limb row only writes its choice to the game log.
+/// menu closes it. Execute gives the execution order, a limb row the maim order for its limbs (<see cref="ExecuteOrder.Limbs"/>).
 /// </summary>
 sealed class MaimMenu : IUiExtension
 {
@@ -115,7 +115,7 @@ sealed class MaimMenu : IUiExtension
     }
 
     /// <summary>
-    /// A row picked: the menu closes; Execute gives the execution order, a limb row (test build) writes its choice to the log.
+    /// A row picked: the menu closes and the row's order goes to the selection (the nearest who can carry it out goes).
     /// </summary>
     static void Pick(string argument)
     {
@@ -124,9 +124,6 @@ sealed class MaimMenu : IUiExtension
         if (open is null || !int.TryParse(argument, out int i) || i < 0 || i >= Rows.Length) return;
         if (ExecutionMod.Context is not { } context) return;
 
-        if (Rows[i].Limbs == 0)
-            context.Enqueue(new ExecuteOrder(open.Selection, open.Target) { Tick = context.Tick });
-        else
-            context.Log($"maim menu: {Rows[i].Caption} picked for {open.Title} (limbs {Rows[i].Limbs & open.Present}); not built yet");
+        context.Enqueue(new ExecuteOrder(open.Selection, open.Target) { Tick = context.Tick, Limbs = Rows[i].Limbs });
     }
 }

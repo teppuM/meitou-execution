@@ -26,6 +26,11 @@ public sealed record ExecuteOrder(IReadOnlyList<CharacterId> Attackers, Characte
     /// Give the Executing job instead of a one-off order.
     /// </summary>
     public bool AsJob { get; init; }
+
+    /// <summary>
+    /// A maim order: the limbs to cut off instead of killing (bit k for limb slot k: 0 left arm, 1 right arm, 2 left leg, 3 right leg); 0 executes.
+    /// </summary>
+    public int Limbs { get; init; }
 }
 
 /// <summary>
@@ -84,6 +89,11 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     public const int MaxWalks = 3, MaxBlows = 80;
 
     /// <summary>
+    /// How many maimed bodies are watched for a death by blood loss at once (the oldest is dropped).
+    /// </summary>
+    public const int MaxMaimed = 64;
+
+    /// <summary>
     /// The standard systems it works with: the blow and the relation deeds, the murder, the swing's length, the squads' memory of who fought them.
     /// </summary>
     readonly CombatSystem? _combat;
@@ -95,6 +105,22 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     /// The animation library and clip lengths (null headless): which weapon swings can be played and how long each lasts.
     /// </summary>
     readonly AnimationSystem? _animation;
+
+    /// <summary>
+    /// The world's body options, shared with the blow (null in a world without them): a maim blow aims at its limb through
+    /// <see cref="BodyOptions.ForcedHitPart"/> and cuts it off through <see cref="BodyOptions.Dismemberment"/>, both put back after the blow.
+    /// </summary>
+    readonly BodyOptions? _options;
+
+    /// <summary>
+    /// The maimed bodies still alive, with who maimed them and the body's faction: a death by blood loss is then a murder.
+    /// </summary>
+    readonly List<(CharacterId Victim, CharacterId Maimer, int Faction)> _maimed = [];
+
+    /// <summary>
+    /// The limbs of the order being started (<see cref="IOrderOwner.Start"/> hands them to the task's start, which makes the job).
+    /// </summary>
+    int _startLimbs;
 
     /// <summary>
     /// The executions under way, in the order they began.
@@ -137,13 +163,20 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         public float StrikeAt;
 
         /// <summary>
+        /// The limbs still to cut off (bits as in <see cref="ExecuteOrder.Limbs"/>); 0 for an execution.
+        /// </summary>
+        public int Limbs;
+
+        /// <summary>
         /// Where the executioner stands for the swing; held there, as a swing's root motion would otherwise step it onto the body each loop.
         /// </summary>
         public Vector3 Stand;
     }
 
-    ExecutionSystem(CombatSystem? combat, CrimeSystem? crimes, CaptiveSystem? captives, DialogueSystem? dialogue, AnimationSystem? animation)
+    ExecutionSystem(CombatSystem? combat, CrimeSystem? crimes, CaptiveSystem? captives, DialogueSystem? dialogue, AnimationSystem? animation,
+        BodyOptions? options)
     {
+        _options = options;
         _combat = combat;
         _crimes = crimes;
         _captives = captives;
@@ -167,7 +200,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     public static ITickSystem Create(SystemBuildContext context)
     {
         var made = new ExecutionSystem(context.Find<CombatSystem>(), context.Find<CrimeSystem>(), context.Find<CaptiveSystem>(),
-            context.Find<DialogueSystem>(), context.Find<AnimationSystem>());
+            context.Find<DialogueSystem>(), context.Find<AnimationSystem>(), context.Data.BodyOptions);
         Current = made;
         return made;
     }
@@ -292,7 +325,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         var table = world.Characters;
         if (!table.TryResolveNext(order.Target, out int v) || !Executable(table.Cold(v))) return;
 
-        var entry = new OrderEntry(Row, this) { Target = order.Target };
+        var entry = new OrderEntry(Row, this) { Target = order.Target, Detail = order.Limbs == 0 ? null : order.Limbs };
         var at = table.Next[v].Position;
         int best = -1;
         float bestDistance = float.MaxValue;
@@ -317,10 +350,14 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     }
 
     /// <summary>
-    /// Starts the walk to the body.
+    /// Starts the walk to the body (a maim order's limbs go with it).
     /// </summary>
-    void IOrderOwner.Start(World world, int slot, OrderEntry order) =>
+    void IOrderOwner.Start(World world, int slot, OrderEntry order)
+    {
+        _startLimbs = order.Detail is int limbs ? limbs : 0;
         TaskStart.Start(world, slot, new TaskRequest(CharacterTask.GoTo, Row, TaskSource.Order) { Target = order.Target });
+        _startLimbs = 0;
+    }
 
     /// <summary>
     /// A running execution stops when its body can no longer be executed.
@@ -423,7 +460,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         }
 
         _jobs.RemoveAll(j => j.Attacker == attacker);
-        var job = new Job { Attacker = attacker, Victim = request.Target };
+        var job = new Job { Attacker = attacker, Victim = request.Target, Limbs = _startLimbs };
         _jobs.Add(job);
         if (table.TryResolveNext(request.Target, out int v)) Walk(world, slot, v, job);
     }
@@ -471,6 +508,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
             if (k >= _jobs.Count) continue;
             Step(world, _jobs[k]);
         }
+        WatchMaimed(world);
     }
 
     /// <summary>
@@ -621,13 +659,95 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
 
         job.Time += world.TickSeconds;
         if (job.Time < (job.Blows + job.StrikeAt) * job.SwingSeconds) return;
-        job.Blows++;
 
         var vc = table.Cold(v)!;
-        _crimes?.SetPending(world, a, CrimeCode.Murder, vc.Faction, job.Victim, CrimeSystem.WitnessTimer);
-        bool died = _combat.Execute(world, a, v, job.Blows);
+        bool maim = job.Limbs != 0;
+        HealthPart? limb = null;
+        if (maim && (limb = NextLimb(vc.Medical!, ref job.Limbs)) is null)
+        {
+            Finish(world, a);
+            return;
+        }
+        job.Blows++;
+
+        // A maim books Assault, an execution Murder; a maimed body that later bleeds to death is a murder too (WatchMaimed).
+        _crimes?.SetPending(world, a, maim ? CrimeCode.Assault : CrimeCode.Murder, vc.Faction, job.Victim, CrimeSystem.WitnessTimer);
+        if (maim) Maimed(job.Victim, job.Attacker, vc.Faction);
+        bool died = limb is null ? _combat.Execute(world, a, v, job.Blows) : Maim(world, a, v, job.Blows, limb);
         _combat.Deeds?.Blow(world, a, v, down: true, dead: died);
-        if (died || job.Blows >= MaxBlows) Finish(world, a);
+
+        // A maim stops the moment its last chosen limb is off.
+        if (died || job.Blows >= MaxBlows || maim && NextLimb(vc.Medical!, ref job.Limbs) is null) Finish(world, a);
+    }
+
+    /// <summary>
+    /// The next chosen limb that a blow can still cut off, in slot order (left arm, right arm, left leg, right leg); the others leave
+    /// <paramref name="limbs"/>: one already off (a stump) or a prosthetic, one the body has no part for, and one wrecked past cutting while still
+    /// on (its flesh at minus its maximum or below, which a blow can no longer land on). Null when none is left.
+    /// </summary>
+    static HealthPart? NextLimb(MedicalState medical, ref int limbs)
+    {
+        for (int k = 0; k < 4; k++)
+        {
+            if ((limbs & (1 << k)) == 0) continue;
+            if (medical.LimbPart(k) is { Limb: LimbState.Original or LimbState.Crushed } p && p.Flesh > -p.MaxHp) return p;
+            limbs &= ~(1 << k);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// A maim blow: the execution blow aimed at <paramref name="limb"/>, and able to cut it off even with the game's Dismemberment option at Never
+    /// (at Rare, the default, and Frequent the setting is left as it is). The options are put back after the blow, so every other blow keeps the
+    /// player's setting, and the debug menu's forced part with it. True when the body died of it.
+    /// </summary>
+    bool Maim(World world, int a, int v, int blow, HealthPart limb)
+    {
+        if (_options is not { } options) return _combat!.Execute(world, a, v, blow);
+        var (forced, setting) = (options.ForcedHitPart, options.Dismemberment);
+        options.ForcedHitPart = (limb.Template.StringId, limb.Template.Name);
+        if (setting < Dismemberment.Rare) options.Dismemberment = Dismemberment.Rare;
+        try
+        {
+            return _combat!.Execute(world, a, v, blow);
+        }
+        finally
+        {
+            options.ForcedHitPart = forced;
+            options.Dismemberment = setting;
+        }
+    }
+
+    /// <summary>
+    /// Remembers that <paramref name="maimer"/> maimed <paramref name="victim"/> of <paramref name="faction"/> (the latest maimer counts).
+    /// </summary>
+    void Maimed(CharacterId victim, CharacterId maimer, int faction)
+    {
+        _maimed.RemoveAll(m => m.Victim == victim);
+        if (_maimed.Count >= MaxMaimed) _maimed.RemoveAt(0);
+        _maimed.Add((victim, maimer, faction));
+    }
+
+    /// <summary>
+    /// The maimed bodies: one that has died of blood loss is a murder by its maimer, set as a pending Murder for witnesses to judge; when the
+    /// body's faction already wants the maimer (it saw the maiming), the Murder is booked with it at once. One that died otherwise, or is gone, is
+    /// forgotten. Not saved: a loaded game watches nobody.
+    /// </summary>
+    void WatchMaimed(World world)
+    {
+        var table = world.Characters;
+        for (int k = _maimed.Count - 1; k >= 0; k--)
+        {
+            var (victim, maimer, faction) = _maimed[k];
+            bool found = table.TryResolveNext(victim, out int v);
+            if (found && table.Cold(v)?.Medical is { Dead: false }) continue;
+            _maimed.RemoveAt(k);
+            if (_crimes is null || !found || table.Cold(v)?.Medical is not { Cause: DeathCause.BloodLoss }) continue;
+            if (!table.TryResolveNext(maimer, out int a)) continue;
+            bool known = table.Cold(a) is { } culprit && _crimes.IsWantedBy(culprit, faction);
+            if (_crimes.SetPending(world, a, CrimeCode.Murder, faction, victim, CrimeSystem.WitnessTimer) && known)
+                _crimes.Book(world, a, faction, CharacterId.None);
+        }
     }
 
     /// <summary>
