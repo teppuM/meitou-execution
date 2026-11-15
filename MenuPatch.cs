@@ -33,6 +33,11 @@ static class MenuPatch
     static PropertyInfo? s_shift;
 
     /// <summary>
+    /// The player interface's cursor position, <c>Mouse</c> (where the right-click menu opened, so the limb menu opens in its place).
+    /// </summary>
+    static FieldInfo? s_mouse;
+
+    /// <summary>
     /// Finds the menu's verb list and the selection read, and patches the list. A missing member is logged and leaves the menu alone.
     /// </summary>
     public static void Apply(ModContext context)
@@ -42,6 +47,7 @@ static class MenuPatch
         s_player = window?.GetFields(BindingFlags.Instance | BindingFlags.NonPublic).FirstOrDefault(f => f.FieldType.Name == "PlayerInterface");
         s_selectedIds = s_player is null ? null : AccessTools.Method(s_player.FieldType, "SelectedIds");
         s_shift = s_player is null ? null : AccessTools.Property(s_player.FieldType, "SlowModifier");
+        s_mouse = s_player is null ? null : AccessTools.Field(s_player.FieldType, "Mouse");
         if (verbs is null || s_selectedIds is null)
         {
             context.LogError("the right-click menu's verb list was not found: no Execute row (the game changed; rebuild the mod)");
@@ -52,8 +58,8 @@ static class MenuPatch
     }
 
     /// <summary>
-    /// Adds the row to a downed, living, uncarried character of another faction who is not in a cage, while some character is selected. Chosen with
-    /// Shift held, it gives the selection the Executing job instead.
+    /// Adds the row to a downed, living, uncarried character of another faction who is not in a cage, while some character is selected. Chosen, it
+    /// opens the limb menu (<see cref="MaimMenu"/>) where the right-click menu was; chosen with Shift held, it gives the selection the Executing job.
     /// </summary>
     static void Postfix(object __instance, CharacterSnapshot target, List<(string, Action)> __result)
     {
@@ -63,7 +69,12 @@ static class MenuPatch
 
         var id = target.Id;
         var player = s_player?.GetValue(__instance);
-        __result.Add((Caption, () => Give(selection, id, Shift(player))));
+        var at = player is not null && s_mouse?.GetValue(player) is System.Numerics.Vector2 mouse ? mouse : default;
+        __result.Add((Caption, () =>
+        {
+            if (Shift(player)) Give(selection, id, asJob: true);
+            else MaimMenu.Show(selection, target, at);
+        }));
     }
 
     /// <summary>

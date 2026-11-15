@@ -25,6 +25,7 @@ public sealed class ExecutionMod : IMod
         JobPatches.Apply(context);
         AiTabPatch.Apply(context);
         SwingPatch.Apply(context, Swings);
+        context.AddUi(new MaimMenu());
     }
 
     /// <summary>
