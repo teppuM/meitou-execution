@@ -29,11 +29,11 @@ In the squad overview's AI tab, beside Heal Allies and Rescue Allies:
 
 Or subscribe on the Steam Workshop and turn it on the same way.
 
-The mod is built for MeitouClient 0.17.4 and newer (tested on 0.20.1). On an older version MeitouClient tells you it was built for a different version instead of loading it.
+The mod is built for MeitouClient 0.21.0 and newer (tested on 0.21.0). It uses the game's own mod hooks for its menu row, its AI tab option, its job and its swings, and patches none of the game's code. On an older version MeitouClient tells you it was built for a different version instead of loading it; for MeitouClient 0.17.4 to 0.20, use Execution 0.5.0.
 
 ## Saves
 
-Saves stay readable by the original game: the Executing job is stored under a key of the mod's own, and an execution in progress is not saved.
+Saves stay readable by the original game: MeitouClient saves the Executing job in its place in the job list under keys of its own, and an execution in progress is not saved. An Executing job in a save made with Execution 0.5.0 or older is dropped when the save loads; give the job again with Shift + Violence...
 
 ## Building
 

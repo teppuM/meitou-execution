@@ -34,7 +34,7 @@ public sealed record ExecuteOrder(IReadOnlyList<CharacterId> Attackers, Characte
 }
 
 /// <summary>
-/// The AI tab's Execute Strangers option set on or off. An order command, so a paused game applies it at once.
+/// The AI tab's Execute Neutrals option set on or off. An order command, so a paused game applies it at once.
 /// </summary>
 public sealed record SetExecuteStrangers(bool On) : OrderCommand;
 
@@ -43,20 +43,26 @@ public sealed record SetExecuteStrangers(bool On) : OrderCommand;
 /// captive execution blow (<see cref="CombatSystem.Execute"/>: no block or dodge, through armour, with the usual blood, sound, death and lost
 /// limbs), one per <c>chop down static</c> clip as the prison executioners swing. Every blow sets a pending Murder against the victim's faction, so
 /// the game's witnesses judge it as any crime, and counts with the victim's faction as a blow on a downed body does in a fight
-/// (<see cref="FactionDeeds.Blow"/>). Runs on the unused vanilla row 229 <see cref="TaskType.StealthKill"/> as a player order (the Violence... menu row)
-/// or as the Executing job (Shift + Execute), which finishes off downed bodies near the character whenever the job list reaches it. Walking is
-/// <see cref="CharacterTask.GoTo"/>, chopping <see cref="CharacterTask.Idle"/> with the clip; another order or Stop ends it. An execution under way
-/// is not saved; the job is (<see cref="JobPatches"/>), and so is the AI tab's Execute Strangers option (<see cref="AiTabPatch"/>), in the mod's own
-/// save data.
+/// (<see cref="FactionDeeds.Blow"/>). Runs on the mod's own task type <see cref="Row"/> (claimed with the game's mod jobs hook) as a player order
+/// (the Violence... menu row) or as the Executing job (Shift + Violence...), which finishes off downed bodies near the character whenever the job
+/// list reaches it. Walking is <see cref="CharacterTask.GoTo"/>, chopping <see cref="CharacterTask.Idle"/> with the clip; another order or Stop ends
+/// it. An execution under way is not saved; the job is (the game saves a mod job in its place in the list), and the AI tab's Execute Neutrals option
+/// is, in the mod's own save data.
 /// </summary>
 public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITaskHandler, IDecisionOwner, IJobSource, IModSaveData
 {
     #region Setup
 
     /// <summary>
-    /// The order's and the job's row: 229, built by the original as <c>Task_StealthKO</c> but registered nowhere and started by nothing.
+    /// The order's and the job's task type, claimed through the mod jobs hook (<see cref="ModContext.AddJobType"/>; mod types start at
+    /// <see cref="SimulationExtensions.FirstModCode"/>).
     /// </summary>
-    public const TaskType Row = TaskType.StealthKill;
+    public const TaskType Row = (TaskType)(SimulationExtensions.FirstModCode + 229);
+
+    /// <summary>
+    /// The job's name in the jobs panel.
+    /// </summary>
+    public const string JobName = "Executing";
 
     /// <summary>
     /// The swing clip, the prison executioners' (<see cref="CaptiveSystem.ChopClip"/>).
@@ -138,7 +144,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     readonly List<(CharacterId Attacker, CharacterId Victim, long Until)> _gaveUp = [];
 
     /// <summary>
-    /// The AI tab's Execute Strangers option: the job also goes after strangers. Set in the serial input step; the interface reads it.
+    /// The AI tab's Execute Neutrals option: the job also goes after strangers. Set in the serial input step; the interface reads it.
     /// </summary>
     volatile bool _strangers;
 
@@ -190,7 +196,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     public static ExecutionSystem? Current { get; private set; }
 
     /// <summary>
-    /// The AI tab's Execute Strangers option.
+    /// The AI tab's Execute Neutrals option.
     /// </summary>
     public bool Strangers => _strangers;
 
@@ -287,7 +293,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     #region Orders
 
     /// <summary>
-    /// Takes the tick's execute orders and Execute Strangers changes.
+    /// Takes the tick's execute orders and Execute Neutrals changes.
     /// </summary>
     public void Inputs(World world, IReadOnlyList<SimCommand> commands)
     {
@@ -600,7 +606,7 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         (job.SwingSeconds, job.StrikeAt) = (seconds, strikeAt);
         if (technique is null) return;
 
-        // A weapon swing replaces the executioners' chop: the animation layer asks the combat system what the character plays (SwingPatch).
+        // A weapon swing replaces the executioners' chop: the animation asks the mod's combat move what the character plays (ExecutionMod.Swing).
         cold.ActionClip = null;
         _swings[job.Attacker] = (technique, world.Tick, Math.Max(1, (long)MathF.Round(seconds / world.TickSeconds)));
     }

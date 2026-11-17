@@ -62,6 +62,7 @@ sealed class MaimMenu : IUiExtension
     /// </summary>
     public void Register(UiRegistration registration)
     {
+        UiRows.Register(registration);
         string panel = registration.RegisterStyle("panel", new UiStyle
         {
             Skin = "Kenshi_FloatingPanelSkin", Background = new(0.1f, 0.09f, 0.08f, 0.94f), Text = Ink,
