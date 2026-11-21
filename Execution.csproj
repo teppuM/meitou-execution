@@ -32,6 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Execution.Chooser.dll, built by its own project against a game with the code-mod API 3. -->
+    <Compile Remove="chooser/**" />
+    <None Remove="chooser/**" />
     <None Include="meitou.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

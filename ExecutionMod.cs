@@ -3,6 +3,9 @@ using Meitou.Data.Gameplay;
 using Meitou.Data.Gameplay.Combat;
 using Meitou.Modding;
 using Meitou.Simulation;
+using Meitou.Simulation.Ai;
+using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
 
 namespace Execution;
 
@@ -40,12 +43,32 @@ public sealed class ExecutionMod : IMod
     public void Initialize(ModContext context)
     {
         Context = context;
-        context.AddSystem("executions", ExecutionSystem.Create, SystemAnchor.End);
+        context.AddSystem("executions", SystemFactory(context), SystemAnchor.End);
         context.AddJobType(ExecutionSystem.Row, ExecutionSystem.JobName);
         LoadSwings(context);
         context.AddCombatMove(Swing);
         context.AddUi(new MaimMenu());
     }
+
+    /// <summary>
+    /// The execution system's factory for the running game: the chooser registry's (code-mod API 3) from Execution.Chooser.dll beside the mod
+    /// when the game has the registry, else the decision system's.
+    /// </summary>
+    static Func<SystemBuildContext, ITickSystem> SystemFactory(ModContext context)
+    {
+        if (typeof(DecisionSystem).Assembly.GetType("Meitou.Simulation.Ai.ChooserRegistry") is null) return LegacyFactory();
+
+        var load = AssemblyLoadContext.GetLoadContext(typeof(ExecutionMod).Assembly) ?? AssemblyLoadContext.Default;
+        var chooser = load.LoadFromAssemblyPath(Path.Combine(context.Folder, "Execution.Chooser.dll"));
+        return chooser.GetType("Execution.ExecutionSystemChooser", throwOnError: true)!.GetMethod("Create")!
+            .CreateDelegate<Func<SystemBuildContext, ITickSystem>>();
+    }
+
+    /// <summary>
+    /// The decision system's factory, apart so that a game with the chooser registry never loads <see cref="ExecutionSystemLegacy"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    static Func<SystemBuildContext, ITickSystem> LegacyFactory() => ExecutionSystemLegacy.Create;
 
     /// <summary>
     /// Reads each weapon kind's swing technique from the game data; a missing one is logged, and that kind keeps the plain chop.

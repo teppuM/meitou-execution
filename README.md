@@ -24,12 +24,12 @@ In the squad overview's AI tab, beside Heal Allies and Rescue Allies:
 
 ## Install
 
-1. Download the zip from the Releases page and unzip it into Kenshi's `mods` folder, so that you have `Kenshi\mods\Execution\Execution.mod`, `Execution.dll` and `meitou.json`.
+1. Download the zip from the Releases page and unzip it into Kenshi's `mods` folder, so that you have `Kenshi\mods\Execution\Execution.mod`, `Execution.dll`, `Execution.Chooser.dll` and `meitou.json`.
 2. Turn it on in the MeitouClient launcher's mod list.
 
 Or subscribe on the Steam Workshop and turn it on the same way.
 
-The mod is built for MeitouClient 0.21.0 and newer (tested on 0.21.0). It uses the game's own mod hooks for its menu row, its AI tab option, its job and its swings, and patches none of the game's code. On an older version MeitouClient tells you it was built for a different version instead of loading it; for MeitouClient 0.17.4 to 0.20, use Execution 0.5.0.
+The mod works on MeitouClient 0.21.0 and newer, including the nightly builds with the reworked AI from 2026-11-21 on (tested on 0.22.1 and the 0.22.2 nightly of 2026-11-21). Those nightlies changed how a mod registers a job, so the mod carries both ways and uses the one the running game has: `Execution.Chooser.dll` holds the newer one. It uses the game's own mod hooks for its menu row, its AI tab option, its job and its swings, and patches none of the game's code. On an older version MeitouClient tells you it was built for a different version instead of loading it; for MeitouClient 0.17.4 to 0.20, use Execution 0.5.0.
 
 ## Saves
 
@@ -37,7 +37,7 @@ Saves stay readable by the original game: MeitouClient saves the Executing job i
 
 ## Building
 
-Build with the .NET 11 SDK against an official MeitouClient release: `dotnet build -c Release -p:MeitouBin=<release folder holding MeitouClient.dll>/`. A self-built MeitouClient won't do: its files carry a different version number, and a mod built against them won't load in the official releases.
+Build with the .NET 11 SDK against official MeitouClient releases, in two steps: `dotnet build Execution.csproj -c Release -p:MeitouBin=<the oldest release it supports, 0.21.0>/`, then `dotnet build chooser/Execution.Chooser.csproj -c Release -p:ChooserBin=<a release with the chooser registry, the 0.22.2 nightly of 2026-11-21 or newer>/`. Ship `bin/Release/Execution.dll` and `chooser/bin/Release/Execution.Chooser.dll` together. Build `Execution.dll` against the oldest release: a mod compiled against a newer game does not load in an older one. A self-built MeitouClient won't do: its files carry a different version number, and a mod built against them won't load in the official releases.
 
 ## License
 

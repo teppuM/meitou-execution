@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Executing job's registration for games with the code-mod API 3 (the chooser registry), compiled against such a game
+       (pass -p:ChooserBin=<folder>/) and against the mod's own Execution.dll (pass -p:ExecutionDll=<path>). Execution.dll itself is compiled
+       against the oldest game it supports: a mod compiled against a newer game does not load in an older one. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Execution.Chooser</AssemblyName>
+    <RootNamespace>Execution</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ChooserBin Condition="'$(ChooserBin)' == ''">$(MSBuildThisFileDirectory)../../MeitouClient/</ChooserBin>
+    <ExecutionDll Condition="'$(ExecutionDll)' == ''">$(MSBuildThisFileDirectory)../bin/Release/Execution.dll</ExecutionDll>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Execution" HintPath="$(ExecutionDll)" Private="false" />
+    <Reference Include="MeitouClient" HintPath="$(ChooserBin)MeitouClient.dll" Private="false" />
+    <Reference Include="Meitou.Simulation" HintPath="$(ChooserBin)Meitou.Simulation.dll" Private="false" />
+    <Reference Include="Meitou.Core" HintPath="$(ChooserBin)Meitou.Core.dll" Private="false" />
+    <Reference Include="Meitou.Data" HintPath="$(ChooserBin)Meitou.Data.dll" Private="false" />
+  </ItemGroup>
+
+</Project>

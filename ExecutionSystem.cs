@@ -49,7 +49,7 @@ public sealed record SetExecuteStrangers(bool On) : OrderCommand;
 /// it. An execution under way is not saved; the job is (the game saves a mod job in its place in the list), and the AI tab's Execute Neutrals option
 /// is, in the mod's own save data.
 /// </summary>
-public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITaskHandler, IDecisionOwner, IJobSource, IModSaveData
+public abstract class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITaskHandler, IJobSource, IModSaveData
 {
     #region Setup
 
@@ -179,15 +179,19 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
         public Vector3 Stand;
     }
 
-    ExecutionSystem(CombatSystem? combat, CrimeSystem? crimes, CaptiveSystem? captives, DialogueSystem? dialogue, AnimationSystem? animation,
-        BodyOptions? options)
+    /// <summary>
+    /// Finds the standard systems the mod works with. The game's own registration of the Executing job differs between game versions, so each
+    /// version has its subclass (<see cref="ExecutionSystemLegacy"/> for games before the code-mod API 3; <c>ExecutionSystemChooser</c> in
+    /// Execution.Chooser.dll for the others).
+    /// </summary>
+    protected ExecutionSystem(SystemBuildContext context)
     {
-        _options = options;
-        _combat = combat;
-        _crimes = crimes;
-        _captives = captives;
-        _dialogue = dialogue;
-        _animation = animation;
+        _options = context.Data.BodyOptions;
+        _combat = context.Find<CombatSystem>();
+        _crimes = context.Find<CrimeSystem>();
+        _captives = context.Find<CaptiveSystem>();
+        _dialogue = context.Find<DialogueSystem>();
+        _animation = context.Find<AnimationSystem>();
     }
 
     /// <summary>
@@ -201,12 +205,10 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     public bool Strangers => _strangers;
 
     /// <summary>
-    /// The factory the mod registers: finds the standard systems it works with.
+    /// Keeps <paramref name="made"/> as <see cref="Current"/> and returns it (each subclass's factory ends here).
     /// </summary>
-    public static ITickSystem Create(SystemBuildContext context)
+    public static ITickSystem Remember(ExecutionSystem made)
     {
-        var made = new ExecutionSystem(context.Find<CombatSystem>(), context.Find<CrimeSystem>(), context.Find<CaptiveSystem>(),
-            context.Find<DialogueSystem>(), context.Find<AnimationSystem>(), context.Data.BodyOptions);
         Current = made;
         return made;
     }
@@ -225,11 +227,6 @@ public sealed class ExecutionSystem : ITickSystem, IOrderOwner, ITaskOwner, ITas
     /// Registers the row's act-out with this system.
     /// </summary>
     public void RegisterTasks(TaskHandlers tasks) => tasks.Register(Row, this);
-
-    /// <summary>
-    /// Registers this system as the Executing job's contributor.
-    /// </summary>
-    public void RegisterSources(DecisionSystem decisions) => decisions.RegisterJob(Row, this);
 
     #endregion
 
